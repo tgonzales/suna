@@ -7,13 +7,8 @@ echo "🚀 Starting Suna Backend..."
 echo "⏳ Waiting for dependencies..."
 sleep 5
 
-# Initialize production settings
-echo "🔧 Initializing production settings..."
-if python init_production.py; then
-    echo "✅ Production initialization completed"
-else
-    echo "⚠️  Production initialization failed, continuing anyway..."
-fi
+# Production settings will be initialized automatically by the FastAPI lifespan
+echo "🔧 Production settings will be initialized by the application..."
 
 # Start the application
 echo "🚀 Starting Gunicorn server..."
@@ -36,3 +31,4 @@ exec uv run gunicorn api:app \
   --capture-output \
   --enable-stdio-inheritance \
   --threads ${THREADS:-2}
+  

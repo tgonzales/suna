@@ -1,3 +1,8 @@
+from pipedream import api as pipedream_api
+from knowledge_base import api as knowledge_base_api
+from mcp_service import template_api as template_api
+from mcp_service import secure_api as secure_mcp_api
+from mcp_service import api as mcp_api
 from fastapi import FastAPI, Request, HTTPException, Response, Depends, APIRouter
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
@@ -42,47 +47,63 @@ instance_id = "single"
 ip_tracker = OrderedDict()
 MAX_CONCURRENT_IPS = 25
 
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    logger.info(f"Starting up FastAPI application with instance ID: {instance_id} in {config.ENV_MODE.value} mode")
+    logger.info(
+        f"Starting up FastAPI application with instance ID: {instance_id} in {config.ENV_MODE.value} mode")
     try:
         await db.initialize()
-        
+
         agent_api.initialize(
             db,
             instance_id
         )
-        
+
         # Initialize workflow API
         workflows_api.initialize(db, instance_id)
-        
+
         sandbox_api.initialize(db)
-        
+
         # Initialize Redis connection
         from services import redis
         try:
             await redis.initialize_async()
             logger.info("Redis connection initialized successfully")
+
+            # Initialize production feature flags
+            if config.ENV_MODE in [EnvMode.PRODUCTION, EnvMode.STAGING]:
+                try:
+                    from flags.flags import enable_flag
+                    await enable_flag('custom_agents', 'Enable custom agents functionality')
+                    await enable_flag('agent_workflows', 'Enable agent workflows')
+                    await enable_flag('mcp_integrations', 'Enable MCP integrations')
+                    logger.info(
+                        "Production feature flags initialized successfully")
+                except Exception as flag_error:
+                    logger.warning(
+                        f"Failed to initialize feature flags: {flag_error}")
+
         except Exception as e:
             logger.error(f"Failed to initialize Redis connection: {e}")
             # Continue without Redis - the application will handle Redis failures gracefully
-        
+
         # Start background tasks
         # asyncio.create_task(agent_api.restore_running_agent_runs())
-        
+
         # Initialize triggers API
         triggers_api.initialize(db)
         unified_oauth_api.initialize(db)
-        
+
         # Initialize pipedream API
         pipedream_api.initialize(db)
-        
+
         yield
-        
+
         # Clean up agent resources
         logger.info("Cleaning up agent resources")
         await agent_api.cleanup()
-        
+
         # Clean up Redis connection
         try:
             logger.info("Closing Redis connection")
@@ -90,7 +111,7 @@ async def lifespan(app: FastAPI):
             logger.info("Redis connection closed successfully")
         except Exception as e:
             logger.error(f"Error closing Redis connection: {e}")
-        
+
         # Clean up database connection
         logger.info("Disconnecting from database")
         await db.disconnect()
@@ -99,6 +120,7 @@ async def lifespan(app: FastAPI):
         raise
 
 app = FastAPI(lifespan=lifespan)
+
 
 @app.middleware("http")
 async def log_requests_middleware(request: Request, call_next):
@@ -120,16 +142,19 @@ async def log_requests_middleware(request: Request, call_next):
     )
 
     # Log the incoming request
-    logger.info(f"Request started: {method} {path} from {client_ip} | Query: {query_params}")
-    
+    logger.info(
+        f"Request started: {method} {path} from {client_ip} | Query: {query_params}")
+
     try:
         response = await call_next(request)
         process_time = time.time() - start_time
-        logger.debug(f"Request completed: {method} {path} | Status: {response.status_code} | Time: {process_time:.2f}s")
+        logger.debug(
+            f"Request completed: {method} {path} | Status: {response.status_code} | Time: {process_time:.2f}s")
         return response
     except Exception as e:
         process_time = time.time() - start_time
-        logger.error(f"Request failed: {method} {path} | Error: {str(e)} | Time: {process_time:.2f}s")
+        logger.error(
+            f"Request failed: {method} {path} | Error: {str(e)} | Time: {process_time:.2f}s")
         raise
 
 # Define allowed origins based on environment
@@ -165,9 +190,6 @@ api_router.include_router(sandbox_api.router)
 api_router.include_router(billing_api.router)
 api_router.include_router(feature_flags_api.router)
 
-from mcp_service import api as mcp_api
-from mcp_service import secure_api as secure_mcp_api
-from mcp_service import template_api as template_api
 
 api_router.include_router(mcp_api.router)
 api_router.include_router(secure_mcp_api.router, prefix="/secure-mcp")
@@ -176,20 +198,19 @@ api_router.include_router(template_api.router, prefix="/templates")
 api_router.include_router(transcription_api.router)
 api_router.include_router(email_api.router)
 
-from knowledge_base import api as knowledge_base_api
 api_router.include_router(knowledge_base_api.router)
 
 api_router.include_router(triggers_api.router)
 api_router.include_router(unified_oauth_api.router)
 
-from pipedream import api as pipedream_api
 api_router.include_router(pipedream_api.router)
+
 
 @api_router.get("/health")
 async def health_check():
     logger.info("Health check endpoint called")
     return {
-        "status": "ok", 
+        "status": "ok",
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "instance_id": instance_id
     }
@@ -199,16 +220,16 @@ app.include_router(api_router, prefix="/api")
 
 if __name__ == "__main__":
     import uvicorn
-    
+
     if sys.platform == "win32":
         asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
-    
+
     workers = 4
-    
+
     logger.info(f"Starting server on 0.0.0.0:8000 with {workers} workers")
     uvicorn.run(
-        "api:app", 
-        host="0.0.0.0", 
+        "api:app",
+        host="0.0.0.0",
         port=8000,
         workers=workers,
         loop="asyncio"
