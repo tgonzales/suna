@@ -1,0 +1,36 @@
+services:
+  - type: web
+    name: suna-backend
+    env: docker
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
+    plan: starter
+    healthCheckPath: /api/health
+    envVars:
+      - key: ENVIRONMENT
+        value: production
+      - key: DEBUG
+        value: false
+      - key: LOG_LEVEL
+        value: INFO
+      - key: WORKERS
+        value: 2
+      - key: THREADS
+        value: 2
+      - key: WORKER_CONNECTIONS
+        value: 1000
+      # Add your actual environment variables here:
+      # - key: SUPABASE_URL
+      #   value: https://your-project.supabase.co
+      # - key: SUPABASE_ANON_KEY
+      #   value: your-anon-key
+      # - key: SUPABASE_SERVICE_ROLE_KEY
+      #   value: your-service-role-key
+      # - key: REDIS_URL
+      #   value: redis://your-redis-url:6379
+      # - key: FERNET_KEY
+      #   value: your-fernet-key
+      # - key: DAYTONA_URL
+      #   value: https://api.daytona.io
+      # - key: DAYTONA_API_KEY
+      #   value: your-daytona-api-key
