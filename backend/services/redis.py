@@ -23,80 +23,40 @@ def initialize():
     # Load environment variables if not already loaded
     load_dotenv()
 
-    # Get Redis configuration - prioritize REDIS_URI/REDIS_URL
-    redis_uri = os.getenv("REDIS_URI") or os.getenv("REDIS_URL")
+    # Get Redis configuration from individual environment variables
+    redis_host = os.getenv("REDIS_HOST", "redis")
+    redis_port = int(os.getenv("REDIS_PORT", 6379))
+    redis_password = os.getenv("REDIS_PASSWORD")
+    redis_ssl = os.getenv("REDIS_SSL", "false").lower() == "true"
+    max_connections = int(os.getenv("REDIS_MAX_CONNECTIONS", 2048))
+    retry_on_timeout = os.getenv("REDIS_RETRY_ON_TIMEOUT", "true").lower() == "true"
 
-    if redis_uri:
-        # Use Redis URI directly - let redis-py handle the parsing
-        logger.info(
-            f"Connecting to Redis using URI: {redis_uri.split('@')[0]}@[hidden]" if '@' in redis_uri else f"Connecting to Redis using URI: {redis_uri}")
+    logger.info(
+        f"Connecting to Redis at {redis_host}:{redis_port} with max {max_connections} connections"
+    )
 
-        # Connection pool configuration for URI
-        max_connections = int(os.getenv("REDIS_MAX_CONNECTIONS", 2048))
-        retry_on_timeout = not (
-            os.getenv("REDIS_RETRY_ON_TIMEOUT", "True").lower() != "true")
+    # Create connection pool with individual parameters
+    pool_kwargs = {
+        "host": redis_host,
+        "port": redis_port,
+        "password": redis_password,
+        "decode_responses": True,
+        "socket_timeout": 20.0,
+        "socket_connect_timeout": 20.0,
+        "retry_on_timeout": retry_on_timeout,
+        "health_check_interval": 30,
+        "max_connections": max_connections,
+    }
 
-        # Check if SSL is required (rediss:// scheme)
-        redis_ssl = redis_uri.startswith("rediss://")
+    # Add SSL configuration if needed
+    if redis_ssl:
+        pool_kwargs.update({
+            "ssl": True,
+            "ssl_check_hostname": False,
+            "ssl_cert_reqs": None,
+        })
 
-        pool_kwargs = {
-            "connection_class": redis.Connection,
-            "decode_responses": True,
-            "socket_timeout": 20.0,
-            "socket_connect_timeout": 20.0,
-            "retry_on_timeout": retry_on_timeout,
-            "health_check_interval": 30,
-            "max_connections": max_connections,
-        }
-
-        # Add SSL configuration if needed
-        if redis_ssl:
-            pool_kwargs.update({
-                "ssl": True,
-                "ssl_check_hostname": False,
-                "ssl_cert_reqs": None,
-            })
-
-        # Create connection pool from URL
-        pool = redis.ConnectionPool.from_url(redis_uri, **pool_kwargs)
-
-    else:
-        # Fallback to individual environment variables
-        redis_host = os.getenv("REDIS_HOST", "redis")
-        redis_port = int(os.getenv("REDIS_PORT", 6379))
-        redis_password = os.getenv("REDIS_PASSWORD", "")
-        redis_ssl = os.getenv("REDIS_SSL", "false").lower() == "true"
-
-        # Connection pool configuration
-        max_connections = int(os.getenv("REDIS_MAX_CONNECTIONS", 2048))
-        retry_on_timeout = not (
-            os.getenv("REDIS_RETRY_ON_TIMEOUT", "True").lower() != "true")
-
-        logger.info(
-            f"Connecting to Redis at {redis_host}:{redis_port} with max {max_connections} connections")
-
-        # Create connection pool with individual parameters
-        pool_kwargs = {
-            "host": redis_host,
-            "port": redis_port,
-            "password": redis_password,
-            "decode_responses": True,
-            "socket_timeout": 20.0,
-            "socket_connect_timeout": 20.0,
-            "retry_on_timeout": retry_on_timeout,
-            "health_check_interval": 30,
-            "max_connections": max_connections,
-        }
-
-        # Add SSL configuration if needed
-        if redis_ssl:
-            pool_kwargs.update({
-                "ssl": True,
-                "ssl_check_hostname": False,
-                "ssl_cert_reqs": None,
-            })
-
-        pool = redis.ConnectionPool(**pool_kwargs)
+    pool = redis.ConnectionPool(**pool_kwargs)
 
     # Create Redis client from connection pool
     client = redis.Redis(connection_pool=pool)
