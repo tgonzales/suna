@@ -9,10 +9,9 @@ import React, {
 } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { User, Session } from '@supabase/supabase-js';
-import { SupabaseClient } from '@supabase/supabase-js';
 
 type AuthContextType = {
-  supabase: SupabaseClient;
+  supabase: ReturnType<typeof createClient>;
   session: Session | null;
   user: User | null;
   isLoading: boolean;
